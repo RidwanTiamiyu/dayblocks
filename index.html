@@ -80,6 +80,13 @@ select,input[type=text],input[type=url],input[type=password],input[type=date]{wi
 .chip.ghost{background:var(--soft);color:var(--ink);border:1px dashed var(--line);font-weight:500}
 .chip.clear{background:var(--soft);color:var(--danger);font-weight:500}
 .dur{font-size:13px;color:var(--mute);margin-top:6px}
+.shHead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px}
+.shHead b{font-size:16px}
+.chip.pick{outline:3px solid var(--ink);outline-offset:2px}
+.edAct{display:none;gap:8px;margin-top:14px}
+.edAct.on{display:flex}
+.edAct .ib{flex:1;height:48px}
+.ib.del{color:var(--danger);border-color:color-mix(in srgb,var(--danger),transparent 50%)}
 /* cards */
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0}
 .card h3{margin:0 0 8px;font-size:15px}
@@ -134,7 +141,7 @@ select,input[type=text],input[type=url],input[type=password],input[type=date]{wi
   </div></header>
   <div class="wrap">
     <div id="weekBanner"></div>
-    <div class="hint">Tap a start time, then an end time. Or long-press and drag.</div>
+    <div class="hint">Tap empty time to start, then tap the end. Tap a block to edit it. Long-press and drag also works.</div>
     <div id="grid"></div>
   </div>
   <button class="fab" id="fab" aria-label="Log a range">+</button>
@@ -230,6 +237,7 @@ select,input[type=text],input[type=url],input[type=password],input[type=date]{wi
 <div id="scrim"></div>
 <div id="sheet"><div class="in">
   <div class="grab"></div>
+  <div class="shHead"><b id="shTitle">Log time</b><span class="muted" id="shHint"></span></div>
   <div class="fl">
     <div><label class="l" for="shFrom">From</label><select id="shFrom"></select></div>
     <div><label class="l" for="shTo">To</label><select id="shTo"></select></div>
@@ -238,6 +246,7 @@ select,input[type=text],input[type=url],input[type=password],input[type=date]{wi
   <label class="l" for="shNote">Note (optional)</label>
   <input type="text" id="shNote" placeholder="e.g. Client call, chapter 3, leg day">
   <div class="chips" id="shChips"></div>
+  <div class="edAct" id="edAct"><button class="ib del" id="edDel">Delete block</button><button class="ib pri" id="edSave">Save changes</button></div>
 </div></div>
 <div id="toast"><span id="toastMsg"></span><button id="toastBtn"></button></div>
 
@@ -250,7 +259,7 @@ select,input[type=text],input[type=url],input[type=password],input[type=date]{wi
 
 <script>
 'use strict';
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const K = 96;                    // 15-minute slots per day
 const P = 'tl1.';                // storage prefix
 const DEFAULT_ACTS = [
@@ -429,6 +438,8 @@ grid.addEventListener('click', e => {
   if (suppressClick || dragging) return;
   const r = rowAt(e.clientX,e.clientY); if (r==null) return;
   if (anchor==null){
+    const d = loadDay(cur), s0 = r*KR();
+    if (d.a[s0]){ openEdit(s0); return; }
     anchor = r; selA = selB = r; paintSel();
     $('#tapMsg').textContent = `Start ${t12(r*KR())}. Now tap the last block.`;
     $('#tapbar').classList.add('on');
@@ -445,7 +456,7 @@ $('#fab').onclick = () => {
 
 /* ---------- sheet (activity picker) ---------- */
 function fillTimeSelects(fromSlot, toSlot){
-  const k = KR(); let f = '', t = '';
+  const k = (fromSlot % KR() || toSlot % KR()) ? 1 : KR(); let f = '', t = '';
   for (let s=0; s<K; s+=k) f += `<option value="${s}">${t12(s)}</option>`;
   for (let s=k; s<=K; s+=k) t += `<option value="${s}">${t12(s)}</option>`;
   $('#shFrom').innerHTML = f; $('#shTo').innerHTML = t;
@@ -455,10 +466,24 @@ function updDur(){
   const f = +$('#shFrom').value, t = +$('#shTo').value;
   $('#shDur').textContent = t>f ? `${fmtMin((t-f)*15)} on ${dayName(cur)}` : 'End must be after start';
 }
-$('#shFrom').onchange = () => { if (+$('#shTo').value <= +$('#shFrom').value) $('#shTo').value = +$('#shFrom').value + KR(); updDur(); };
+$('#shFrom').onchange = () => { if (+$('#shTo').value <= +$('#shFrom').value){ const o = [...$('#shTo').options].find(o=>+o.value > +$('#shFrom').value); if (o) $('#shTo').value = o.value; } updDur(); };
 $('#shTo').onchange = updDur;
-function openSheet(rowA, rowB){
-  const k = KR(), from = rowA*k, to = rowB*k, d = loadDay(cur);
+let edit = null; // {from,to,act} while editing an existing block
+function setMode(e){
+  edit = e;
+  $('#shTitle').textContent = e ? 'Edit block' : 'Log time';
+  $('#shHint').textContent = e ? 'Pick an activity, then Save' : 'Tap an activity to save';
+  $('#edAct').classList.toggle('on', !!e);
+  const clr = $('#shChips .chip.clear'); if (clr) clr.style.display = e ? 'none' : '';
+  document.querySelectorAll('#shChips .chip').forEach(c=>c.classList.toggle('pick', !!e && c.dataset.id===e.act));
+}
+function openEdit(slot){
+  const d = loadDay(cur), key = i => d.a[i]+'|'+(d.n[i]||'');
+  let f = slot, t = slot+1; while (f>0 && key(f-1)===key(slot)) f--; while (t<K && key(t)===key(slot)) t++;
+  openSheet(f/KR(), t/KR(), {from:f, to:t, act:d.a[slot]});
+}
+function openSheet(rowA, rowB, editInfo){
+  const k = KR(), from = Math.round(rowA*k), to = Math.round(rowB*k), d = loadDay(cur);
   fillTimeSelects(from, to);
   // prefill note if the whole range shares one
   const notes = new Set(); for (let i=from;i<to;i++) notes.add(d.n[i]||'');
@@ -466,6 +491,7 @@ function openSheet(rowA, rowB){
   const vis = acts.filter(a=>!a.hidden);
   $('#shChips').innerHTML = vis.map(a=>`<button class="chip" style="--c:${a.color}" data-id="${a.id}">${esc(a.name)}</button>`).join('')
     + `<button class="chip ghost" data-id="__new">+ New activity</button><button class="chip clear" data-id="">Clear blocks</button>`;
+  setMode(editInfo || null); $('#toast').classList.remove('on');
   $('#scrim').classList.add('on'); $('#sheet').classList.add('on');
 }
 function closeSheet(){ $('#scrim').classList.remove('on'); $('#sheet').classList.remove('on'); }
@@ -477,12 +503,30 @@ $('#shChips').onclick = e => {
     const name = (prompt('New activity name') || '').trim(); if (!name) return;
     const a = {id:'a'+Date.now().toString(36), name, color:PALETTE[acts.length % PALETTE.length], hidden:false};
     acts.push(a); saveActs(); id = a.id;
+    if (edit){ b.insertAdjacentHTML('beforebegin', `<button class="chip" style="--c:${a.color}" data-id="${a.id}">${esc(a.name)}</button>`); }
   }
+  if (edit){ edit.act = id; setMode(edit); return; }
   const f = +$('#shFrom').value, t = +$('#shTo').value; if (t<=f) return toast('End must be after start');
   const d = loadDay(cur), prev = JSON.stringify(d), note = $('#shNote').value.trim();
   for (let i=f;i<t;i++){ d.a[i] = id; if (id && note) d.n[i] = note; else delete d.n[i]; }
   saveDay(cur,d); closeSheet(); clearSel(); renderDay();
   toast(id ? `${actById(id).name} · ${fmtMin((t-f)*15)}` : `Cleared ${fmtMin((t-f)*15)}`, 'Undo', ()=>{ saveDay(cur, JSON.parse(prev)); renderDay(); });
+};
+$('#edSave').onclick = () => {
+  if (!edit) return;
+  const f = +$('#shFrom').value, t = +$('#shTo').value; if (t<=f) return toast('End must be after start');
+  const d = loadDay(cur), prev = JSON.stringify(d), note = $('#shNote').value.trim();
+  for (let i=edit.from;i<edit.to;i++){ d.a[i] = ''; delete d.n[i]; }       // remove the old block
+  for (let i=f;i<t;i++){ d.a[i] = edit.act; if (note) d.n[i] = note; else delete d.n[i]; }
+  saveDay(cur,d); closeSheet(); clearSel(); edit = null; renderDay();
+  toast('Block updated', 'Undo', ()=>{ saveDay(cur, JSON.parse(prev)); renderDay(); });
+};
+$('#edDel').onclick = () => {
+  if (!edit) return;
+  const d = loadDay(cur), prev = JSON.stringify(d);
+  for (let i=edit.from;i<edit.to;i++){ d.a[i] = ''; delete d.n[i]; }
+  saveDay(cur,d); closeSheet(); clearSel(); edit = null; renderDay();
+  toast('Block deleted', 'Undo', ()=>{ saveDay(cur, JSON.parse(prev)); renderDay(); });
 };
 const PALETTE = ['#4f46e5','#0f766e','#15803d','#7c3aed','#ea580c','#64748b','#ca8a04','#db2777','#0891b2','#dc2626','#9333ea','#475569','#b45309','#be123c','#0369a1','#4d7c0f'];
 
