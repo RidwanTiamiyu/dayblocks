@@ -259,7 +259,7 @@ select,input[type=text],input[type=url],input[type=password],input[type=date]{wi
 
 <script>
 'use strict';
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const K = 96;                    // 15-minute slots per day
 const P = 'tl1.';                // storage prefix
 const DEFAULT_ACTS = [
@@ -326,7 +326,17 @@ function toast(msg, btn, fn){
 
 /* ---------- tabs ---------- */
 let curView = 'log';
-function show(v){
+/* Android back button: anything open on top of the Log page (edit sheet, half-made selection,
+   another tab) owns one history entry, so Back closes it instead of exiting the app. */
+const layerOpen = () => $('#sheet').classList.contains('on') || anchor!=null || curView!=='log';
+function ensureLayer(){ if (!(history.state && history.state.layer)) history.pushState({layer:1}, ''); }
+function settle(){ setTimeout(()=>{ if (!layerOpen() && history.state && history.state.layer) history.back(); }, 0); }
+window.addEventListener('popstate', () => {
+  if ($('#sheet').classList.contains('on')) closeSheet(true);
+  clearSel(); edit = null;
+  if (curView!=='log') show('log', true);
+});
+function show(v, fromPop){
   curView = v;
   document.querySelectorAll('.view').forEach(x=>x.classList.toggle('on', x.id==='v-'+v));
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
@@ -334,6 +344,7 @@ function show(v){
   if (v==='log') renderDay(); if (v==='sum') renderSum(); if (v==='exp') renderExpInfo(); if (v==='set') renderSettings();
   window.scrollTo(0,0);
   if (v==='log' && cur===today()) scrollToNow();
+  if (!fromPop){ if (v==='log') settle(); else ensureLayer(); }
 }
 document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>show(b.dataset.v));
 
@@ -442,13 +453,13 @@ grid.addEventListener('click', e => {
     if (d.a[s0]){ openEdit(s0); return; }
     anchor = r; selA = selB = r; paintSel();
     $('#tapMsg').textContent = `Start ${t12(r*KR())}. Now tap the last block.`;
-    $('#tapbar').classList.add('on');
+    $('#tapbar').classList.add('on'); ensureLayer();
   } else {
     const a = Math.min(anchor,r), b = Math.max(anchor,r); clearSel(); openSheet(a, b+1);
   }
 });
 $('#tapOne').onclick = () => { const r = anchor; clearSel(); openSheet(r, r+1); };
-$('#tapCancel').onclick = clearSel;
+$('#tapCancel').onclick = () => { clearSel(); settle(); };
 $('#fab').onclick = () => {
   const now = new Date(), r = Math.floor((now.getHours()*60+now.getMinutes())/G());
   openSheet(Math.max(0,r-1), Math.max(1,r));
@@ -492,9 +503,9 @@ function openSheet(rowA, rowB, editInfo){
   $('#shChips').innerHTML = vis.map(a=>`<button class="chip" style="--c:${a.color}" data-id="${a.id}">${esc(a.name)}</button>`).join('')
     + `<button class="chip ghost" data-id="__new">+ New activity</button><button class="chip clear" data-id="">Clear blocks</button>`;
   setMode(editInfo || null); $('#toast').classList.remove('on');
-  $('#scrim').classList.add('on'); $('#sheet').classList.add('on');
+  $('#scrim').classList.add('on'); $('#sheet').classList.add('on'); ensureLayer();
 }
-function closeSheet(){ $('#scrim').classList.remove('on'); $('#sheet').classList.remove('on'); }
+function closeSheet(fromPop){ $('#scrim').classList.remove('on'); $('#sheet').classList.remove('on'); if (!fromPop) settle(); }
 $('#scrim').onclick = () => { closeSheet(); clearSel(); };
 $('#shChips').onclick = e => {
   const b = e.target.closest('.chip'); if (!b) return;
