@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111418">
+<meta name="description" content="Log your day in 15, 30 or 60 minute blocks">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>DayBlocks</title>
+<style>
+:root{
+  --bg:#f6f7f9;--panel:#ffffff;--ink:#14171c;--mute:#6b7280;--line:#e5e7eb;--soft:#eef0f3;
+  --acc:#2563eb;--accInk:#fff;--sel:rgba(37,99,235,.18);--danger:#dc2626;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0f1115;--panel:#171a20;--ink:#e8eaed;--mute:#9aa1ab;--line:#2a2f37;--soft:#1f232a;
+  --acc:#5b8cff;--accInk:#0b0d10;--sel:rgba(91,140,255,.25);--danger:#f87171;
+}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+.wrap{max-width:640px;margin:0 auto;padding:0 12px}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(8px + env(safe-area-inset-top)) 0 8px;border-bottom:1px solid var(--line)}
+.nav{display:flex;align-items:center;gap:6px}
+.nav h1{flex:1;font-size:17px;margin:0;text-align:center;font-weight:650}
+.ib{border:1px solid var(--line);background:var(--panel);border-radius:10px;min-width:40px;height:40px;padding:0 10px;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.ib.pri{background:var(--acc);color:var(--accInk);border-color:var(--acc);font-weight:600}
+.ib.small{height:32px;min-width:32px;font-size:13px;border-radius:8px}
+.daybar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--soft);margin-top:8px}
+.daybar i{display:block;height:100%}
+.meta{display:flex;justify-content:space-between;font-size:12px;color:var(--mute);margin-top:4px}
+.hint{font-size:12px;color:var(--mute);text-align:center;padding:6px 0 0}
+.view{display:none}.view.on{display:block}
+/* grid */
+#grid{margin:8px 0 80px;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.row{display:flex;align-items:stretch;min-height:var(--rh,34px)}
+.row .t{width:54px;flex:none;font-size:11px;color:var(--mute);text-align:right;padding:0 8px 0 0;transform:translateY(-7px)}
+.row.hr .t{color:var(--ink);font-weight:600}
+.row .c{flex:1;border-top:1px solid var(--line);position:relative;padding:0 2px}
+.row.hr .c{border-top-color:color-mix(in srgb,var(--line),var(--ink) 18%)}
+.row .b{position:absolute;inset:-1px 2px 0 2px;border-radius:0;background:var(--blk,transparent);color:#fff;font-size:13px;padding:0 8px;display:flex;flex-direction:column;justify-content:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.row.rs .b{border-top-left-radius:8px;border-top-right-radius:8px;top:2px}
+.row.re .b{border-bottom-left-radius:8px;border-bottom-right-radius:8px;bottom:2px}
+.row .b small{opacity:.85;font-size:11px}
+.row.sel .c{background:var(--sel)}
+.row.anc .c{box-shadow:inset 3px 0 0 var(--acc)}
+.now{position:absolute;left:0;right:0;height:2px;background:var(--danger);z-index:2;pointer-events:none}
+.now::before{content:"";position:absolute;left:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--danger)}
+#tapbar{position:fixed;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom));z-index:6;display:none}
+#tapbar.on{display:block}
+#tapbar .in{max-width:640px;margin:0 auto 8px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 10px;display:flex;gap:8px;align-items:center;box-shadow:0 6px 24px rgba(0,0,0,.15)}
+#tapbar .in span{flex:1;font-size:13px}
+.fab{position:fixed;right:max(16px,calc(50% - 304px));bottom:calc(80px + env(safe-area-inset-bottom));z-index:6;width:56px;height:56px;border-radius:16px;border:0;background:var(--acc);color:var(--accInk);font-size:28px;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.banner{background:var(--acc);color:var(--accInk);border-radius:12px;padding:10px 12px;margin:8px 0;display:flex;align-items:center;gap:8px;font-size:14px}
+.banner b{flex:1}
+.banner button{background:rgba(255,255,255,.2);border:0;border-radius:8px;padding:6px 10px;color:inherit}
+/* tabs */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:7;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs .in{max-width:640px;margin:0 auto;display:flex}
+nav.tabs button{flex:1;border:0;background:none;padding:8px 0 10px;font-size:12px;color:var(--mute);display:flex;flex-direction:column;align-items:center;gap:2px}
+nav.tabs button.on{color:var(--acc);font-weight:600}
+nav.tabs svg{width:22px;height:22px}
+/* sheet */
+#scrim{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:20;display:none}
+#scrim.on{display:block}
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:21;transform:translateY(105%);transition:transform .2s ease}
+#sheet.on{transform:none}
+#sheet .in{max-width:640px;margin:0 auto;background:var(--panel);border-radius:16px 16px 0 0;padding:14px 14px calc(16px + env(safe-area-inset-bottom));max-height:85vh;overflow:auto}
+.grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 10px}
+.fl{display:flex;gap:8px;align-items:center}
+.fl>*{flex:1}
+label.l{display:block;font-size:12px;color:var(--mute);margin:10px 0 4px}
+select,input[type=text],input[type=url],input[type=password],input[type=date]{width:100%;height:42px;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:0 10px}
+.chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:12px}
+.chip{border:0;border-radius:10px;padding:12px 10px;color:#fff;font-weight:600;text-align:left;background:var(--c);min-height:48px}
+.chip.ghost{background:var(--soft);color:var(--ink);border:1px dashed var(--line);font-weight:500}
+.chip.clear{background:var(--soft);color:var(--danger);font-weight:500}
+.dur{font-size:13px;color:var(--mute);margin-top:6px}
+/* cards */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0}
+.card h3{margin:0 0 8px;font-size:15px}
+.seg{display:flex;background:var(--soft);border-radius:10px;padding:3px;gap:3px}
+.seg button{flex:1;border:0;background:none;border-radius:8px;height:34px;color:var(--mute)}
+.seg button.on{background:var(--panel);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.big{font-size:22px;font-weight:700}
+.sub{font-size:12px;color:var(--mute)}
+.stat{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.stat>div{background:var(--soft);border-radius:10px;padding:8px}
+.bars .br{margin:10px 0}
+.bars .hd{display:flex;justify-content:space-between;font-size:14px;gap:8px}
+.bars .hd span:first-child{display:flex;align-items:center;gap:6px;min-width:0}
+.dot{width:10px;height:10px;border-radius:3px;flex:none}
+.bars .tr{height:8px;border-radius:4px;background:var(--soft);margin-top:4px;overflow:hidden}
+.bars .tr i{display:block;height:100%;border-radius:4px}
+.bars .ft{font-size:11px;color:var(--mute);margin-top:2px;display:flex;justify-content:space-between}
+.up{color:#16a34a}.dn{color:var(--danger)}
+.days .d{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px}
+.days .d span{width:64px;flex:none;color:var(--mute)}
+.days .d .daybar{flex:1;margin:0;height:14px;border-radius:4px}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.btns .ib{height:46px}
+.act{display:flex;gap:8px;align-items:center;margin:6px 0}
+.act input[type=color]{width:40px;height:40px;border:0;padding:0;background:none;border-radius:8px}
+.act input[type=text]{flex:1}
+.act.hid input[type=text]{opacity:.5;text-decoration:line-through}
+#toast{border:1px solid #333;position:fixed;left:50%;bottom:calc(140px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:10px;z-index:30;display:none;align-items:center;gap:12px;font-size:14px;max-width:90vw}
+#toast.on{display:flex}
+#toast button{background:none;border:0;color:#8fb3ff;font-weight:700}
+.muted{color:var(--mute);font-size:13px}
+.ok{color:#16a34a}.err{color:var(--danger)}
+</style>
+</head>
+<body>
+
+<!-- LOG VIEW -->
+<section class="view on" id="v-log">
+  <header class="top"><div class="wrap">
+    <div class="nav">
+      <button class="ib" id="prevDay" aria-label="Previous day">‹</button>
+      <h1 id="dayTitle">Today</h1>
+      <button class="ib" id="nextDay" aria-label="Next day">›</button>
+    </div>
+    <div class="nav" style="margin-top:8px">
+      <button class="ib small" id="goToday">Today</button>
+      <input type="date" id="datePick" style="height:32px;flex:1;font-size:13px">
+      <button class="ib small" id="copyPrev" title="Fill empty blocks with yesterday's">Copy yesterday</button>
+    </div>
+    <div class="daybar" id="dayBar"></div>
+    <div class="meta"><span id="dayLogged"></span><span id="syncState"></span></div>
+  </div></header>
+  <div class="wrap">
+    <div id="weekBanner"></div>
+    <div class="hint">Tap a start time, then an end time. Or long-press and drag.</div>
+    <div id="grid"></div>
+  </div>
+  <button class="fab" id="fab" aria-label="Log a range">+</button>
+</section>
+
+<!-- SUMMARY VIEW -->
+<section class="view" id="v-sum">
+  <header class="top"><div class="wrap">
+    <div class="seg" id="sumMode"><button data-m="day">Day</button><button data-m="week" class="on">Week</button><button data-m="month">Month</button></div>
+    <div class="nav" style="margin-top:8px">
+      <button class="ib" id="sumPrev">‹</button><h1 id="sumTitle"></h1><button class="ib" id="sumNext">›</button>
+    </div>
+  </div></header>
+  <div class="wrap" id="sumBody"></div>
+</section>
+
+<!-- EXPORT VIEW -->
+<section class="view" id="v-exp">
+  <header class="top"><div class="wrap"><div class="nav"><h1>Export &amp; analyze</h1></div></div></header>
+  <div class="wrap">
+    <div class="card">
+      <h3>Date range</h3>
+      <select id="expRange">
+        <option value="tw">This week</option><option value="lw">Last week</option>
+        <option value="tm">This month</option><option value="lm">Last month</option>
+        <option value="all" selected>All time</option><option value="cu">Custom…</option>
+      </select>
+      <div class="fl" id="expCustom" style="display:none;margin-top:8px"><input type="date" id="expFrom"><input type="date" id="expTo"></div>
+      <div class="muted" id="expInfo" style="margin-top:6px"></div>
+    </div>
+    <div class="card">
+      <h3>Spreadsheet (opens in Excel / Sheets)</h3>
+      <div class="btns">
+        <button class="ib" id="exBlocks">Blocks CSV</button>
+        <button class="ib" id="exDaily">Daily totals CSV</button>
+      </div>
+      <p class="muted">Blocks: one row per activity block (date, start, end, minutes, activity, note). Daily totals: one row per day, one column per activity in hours.</p>
+    </div>
+    <div class="card">
+      <h3>Ask an AI about your time</h3>
+      <div class="btns">
+        <button class="ib pri" id="exAI">Copy AI prompt</button>
+        <button class="ib" id="exAIshare">Share…</button>
+      </div>
+      <p class="muted">Copies a ready-made prompt with your data. Paste it into Claude or any chatbot.</p>
+    </div>
+    <div class="card">
+      <h3>Backup</h3>
+      <div class="btns">
+        <button class="ib" id="exJSON">Download backup</button>
+        <button class="ib" id="imJSONbtn">Restore backup</button>
+      </div>
+      <input type="file" id="imJSON" accept=".json,application/json" hidden>
+      <p class="muted">Backup includes every day and your activity list. Restore merges into what's here.</p>
+    </div>
+  </div>
+</section>
+
+<!-- SETTINGS VIEW -->
+<section class="view" id="v-set">
+  <header class="top"><div class="wrap"><div class="nav"><h1>Settings</h1></div></div></header>
+  <div class="wrap">
+    <div class="card">
+      <h3>Block size</h3>
+      <div class="seg" id="granSeg"><button data-g="15">15 min</button><button data-g="30">30 min</button><button data-g="60">1 hour</button></div>
+      <p class="muted">Switch anytime. Data is stored at 15 minute precision, so nothing is lost.</p>
+    </div>
+    <div class="card">
+      <h3>Activities</h3>
+      <div id="actList"></div>
+      <div class="fl" style="margin-top:8px"><input type="text" id="newAct" placeholder="New activity name"><button class="ib pri" id="addAct" style="flex:none">Add</button></div>
+      <p class="muted">Tap the color to change it. Hiding an activity removes it from the picker but keeps its history.</p>
+    </div>
+    <div class="card">
+      <h3>Google Sheet sync &amp; weekly email</h3>
+      <label class="l" for="syncUrl">Apps Script web app URL</label>
+      <input type="url" id="syncUrl" placeholder="https://script.google.com/macros/s/…/exec">
+      <label class="l" for="syncToken">Sync token</label>
+      <input type="password" id="syncToken" placeholder="Token from the script's setup()">
+      <div class="btns"><button class="ib" id="saveSync">Save</button><button class="ib pri" id="syncAll">Sync everything now</button></div>
+      <p class="muted" id="syncInfo"></p>
+    </div>
+    <div class="card">
+      <h3>Storage</h3>
+      <p class="muted" id="storeInfo"></p>
+    </div>
+    <p class="muted" style="text-align:center">DayBlocks v<span id="ver"></span></p>
+  </div>
+</section>
+
+<!-- shared UI -->
+<div id="tapbar"><div class="in"><span id="tapMsg"></span><button class="ib small" id="tapOne">This block only</button><button class="ib small" id="tapCancel">✕</button></div></div>
+<div id="scrim"></div>
+<div id="sheet"><div class="in">
+  <div class="grab"></div>
+  <div class="fl">
+    <div><label class="l" for="shFrom">From</label><select id="shFrom"></select></div>
+    <div><label class="l" for="shTo">To</label><select id="shTo"></select></div>
+  </div>
+  <div class="dur" id="shDur"></div>
+  <label class="l" for="shNote">Note (optional)</label>
+  <input type="text" id="shNote" placeholder="e.g. Client call, chapter 3, leg day">
+  <div class="chips" id="shChips"></div>
+</div></div>
+<div id="toast"><span id="toastMsg"></span><button id="toastBtn"></button></div>
+
+<nav class="tabs"><div class="in">
+  <button data-v="log" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 9h16M4 15h16"/></svg>Log</button>
+  <button data-v="sum"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Summary</button>
+  <button data-v="exp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Export</button>
+  <button data-v="set"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
+</div></nav>
+
+<script>
+'use strict';
+const VERSION = '1.0.0';
+const K = 96;                    // 15-minute slots per day
+const P = 'tl1.';                // storage prefix
+const DEFAULT_ACTS = [
+  ['Sleep','#4f46e5'],['Work','#0f766e'],['Deep work','#15803d'],['Learning','#7c3aed'],
+  ['Exercise','#ea580c'],['Commute','#64748b'],['Meals','#ca8a04'],['Family & friends','#db2777'],
+  ['Chores & errands','#0891b2'],['Leisure / phone','#dc2626'],['Personal care','#9333ea'],['Other','#475569']
+].map(([name,color],i)=>({id:'a'+(i+1),name,color,hidden:false}));
+
+/* ---------- storage ---------- */
+const LS = {
+  get(k,d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch{ return d; } },
+  set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){ toast('Could not save: storage full or blocked'); } },
+  del(k){ try{ localStorage.removeItem(k); }catch{} }
+};
+let acts = LS.get(P+'acts', null) || DEFAULT_ACTS;
+const cfg = Object.assign({gran:30, syncUrl:'', token:'', weekSeen:'', lastSync:'', lastSyncOk:null}, LS.get(P+'cfg', {}));
+const saveActs = () => LS.set(P+'acts', acts);
+const saveCfg  = () => LS.set(P+'cfg', cfg);
+const actById = id => acts.find(a=>a.id===id) || {id, name:'(deleted)', color:'#888', hidden:true};
+const emptyDay = () => ({a:Array(K).fill(''), n:{}});
+const loadDay = ds => LS.get(P+'d.'+ds, null) || emptyDay();
+function saveDay(ds, d){
+  if (d.a.every(x=>!x)) LS.del(P+'d.'+ds); else LS.set(P+'d.'+ds, d);
+  const dirty = new Set(LS.get(P+'dirty', [])); dirty.add(ds); LS.set(P+'dirty', [...dirty]);
+  scheduleSync();
+}
+function allDates(){
+  const out = [];
+  for (let i=0;i<localStorage.length;i++){ const k = localStorage.key(i); if (k && k.startsWith(P+'d.')) out.push(k.slice(P.length+2)); }
+  return out.sort();
+}
+
+/* ---------- dates & formatting ---------- */
+const $ = s => document.querySelector(s);
+const pad = n => String(n).padStart(2,'0');
+const ymd = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const parse = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d); };
+const addDays = (s,n) => { const d = parse(s); d.setDate(d.getDate()+n); return ymd(d); };
+const today = () => ymd(new Date());
+const weekStart = s => { const d = parse(s); d.setDate(d.getDate() - (d.getDay()+6)%7); return ymd(d); };
+const monthStart = s => s.slice(0,8)+'01';
+const monthEnd = s => { const d = parse(s); return ymd(new Date(d.getFullYear(), d.getMonth()+1, 0)); };
+const addMonths = (s,n) => { const d = parse(s); return ymd(new Date(d.getFullYear(), d.getMonth()+n, 1)); };
+function range(a,b){ const out=[]; for (let s=a; s<=b; s=addDays(s,1)) out.push(s); return out; }
+const fmtMin = m => { const h = Math.floor(m/60), mm = Math.round(m%60); return h ? (mm ? `${h}h ${mm}m` : `${h}h`) : `${mm}m`; };
+const hrs = m => (m/60).toFixed(m%60 ? 1 : 0)+'h';
+const hhmm = slot => { const m = slot*15; return pad(Math.floor(m/60))+':'+pad(m%60); }; // 96 -> 24:00
+function t12(slot, short){
+  const m = slot*15, h24 = Math.floor(m/60)%24, mm = m%60;
+  if (slot===K) return short ? '12 AM' : '12:00 AM (midnight)';
+  const ap = h24<12 ? 'AM' : 'PM', h = h24%12 || 12;
+  return short && !mm ? `${h} ${ap}` : `${h}:${pad(mm)} ${ap}`;
+}
+const dayName = (s,opt) => parse(s).toLocaleDateString(undefined, opt || {weekday:'short', month:'short', day:'numeric'});
+const esc = s => String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- toast ---------- */
+let toastT;
+function toast(msg, btn, fn){
+  $('#toastMsg').textContent = msg;
+  const b = $('#toastBtn'); b.style.display = btn ? '' : 'none'; b.textContent = btn || ''; b.onclick = () => { fn && fn(); $('#toast').classList.remove('on'); };
+  $('#toast').classList.add('on'); clearTimeout(toastT); toastT = setTimeout(()=>$('#toast').classList.remove('on'), btn ? 5000 : 2500);
+}
+
+/* ---------- tabs ---------- */
+let curView = 'log';
+function show(v){
+  curView = v;
+  document.querySelectorAll('.view').forEach(x=>x.classList.toggle('on', x.id==='v-'+v));
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
+  clearSel();
+  if (v==='log') renderDay(); if (v==='sum') renderSum(); if (v==='exp') renderExpInfo(); if (v==='set') renderSettings();
+  window.scrollTo(0,0);
+  if (v==='log' && cur===today()) scrollToNow();
+}
+document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>show(b.dataset.v));
+
+/* ---------- LOG VIEW ---------- */
+let cur = today();
+let anchor = null, selA = null, selB = null; // row indexes
+const G = () => cfg.gran, KR = () => cfg.gran/15, ROWS = () => 1440/cfg.gran;
+
+function dayBarHTML(d){
+  let html = '', i = 0;
+  while (i<K){ let j=i; while (j<K && d.a[j]===d.a[i]) j++;
+    html += `<i style="width:${(j-i)/K*100}%;background:${d.a[i] ? actById(d.a[i]).color : 'transparent'}"></i>`; i=j; }
+  return html;
+}
+function rowKey(d, r){
+  const k = KR(), s = r*k; let key = d.a[s]+'|'+(d.n[s]||'');
+  for (let i=s+1;i<s+k;i++) if (d.a[i]+'|'+(d.n[i]||'') !== key) return '*'+r;
+  return key;
+}
+function renderDay(){
+  const d = loadDay(cur), k = KR(), rows = ROWS(), t = today();
+  $('#dayTitle').textContent = cur===t ? 'Today, '+dayName(cur,{month:'short',day:'numeric'}) : cur===addDays(t,-1) ? 'Yesterday, '+dayName(cur,{month:'short',day:'numeric'}) : dayName(cur,{weekday:'long',month:'short',day:'numeric'});
+  $('#datePick').value = cur;
+  $('#dayBar').innerHTML = dayBarHTML(d);
+  const logged = d.a.filter(Boolean).length*15;
+  $('#dayLogged').textContent = `${fmtMin(logged)} logged · ${fmtMin(1440-logged)} open`;
+  const rh = cfg.gran===15 ? 26 : cfg.gran===30 ? 34 : 48;
+  const keys = Array.from({length:rows}, (_,r)=>rowKey(d,r));
+  let html = '';
+  for (let r=0;r<rows;r++){
+    const s = r*k, mixed = keys[r][0]==='*', a = d.a[s];
+    const rs = r===0 || keys[r-1]!==keys[r], re = r===rows-1 || keys[r+1]!==keys[r];
+    const isHr = (s*15)%60===0;
+    let bg = 'transparent', label = '';
+    if (mixed){
+      const stops = [];
+      for (let i=0;i<k;i++){ const c = d.a[s+i] ? actById(d.a[s+i]).color : 'transparent'; stops.push(`${c} ${i/k*100}% ${(i+1)/k*100}%`); }
+      bg = `linear-gradient(to right,${stops.join(',')})`;
+    } else if (a){
+      bg = actById(a).color;
+      if (rs){ let e=r; while (e+1<rows && keys[e+1]===keys[r]) e++;
+        label = `<span>${esc(actById(a).name)} · ${fmtMin((e-r+1)*G())}</span>${d.n[s] ? `<small>${esc(d.n[s])}</small>` : ''}`; }
+    }
+    html += `<div class="row${isHr?' hr':''}${a||mixed ? (rs?' rs':'')+(re?' re':'') : ''}" data-r="${r}" style="--rh:${rh}px"><div class="t">${isHr ? t12(s,true) : ''}</div><div class="c"><div class="b" style="--blk:${bg}">${label}</div></div></div>`;
+  }
+  $('#grid').innerHTML = html;
+  if (cur===t){ const now = new Date(), m = now.getHours()*60+now.getMinutes(), r = Math.floor(m/G());
+    const row = $('#grid').children[r]; if (row){ const n = document.createElement('div'); n.className='now'; n.style.top = ((m%G())/G()*100)+'%'; row.querySelector('.c').appendChild(n); } }
+  paintSel(); renderBanner(); renderSyncState();
+}
+function scrollToNow(){
+  const m = new Date().getHours()*60, r = Math.max(0, Math.floor(m/G())-2), row = $('#grid').children[r];
+  if (row) window.scrollTo(0, row.getBoundingClientRect().top + window.scrollY - 150);
+}
+function paintSel(){
+  const lo = selA==null ? -1 : Math.min(selA,selB), hi = selA==null ? -1 : Math.max(selA,selB);
+  [...$('#grid').children].forEach((el,r)=>{ el.classList.toggle('sel', r>=lo && r<=hi); el.classList.toggle('anc', r===anchor); });
+}
+function clearSel(){ anchor = selA = selB = null; $('#tapbar').classList.remove('on'); paintSel(); }
+function go(ds){ cur = ds; clearSel(); renderDay(); window.scrollTo(0,0); if (ds===today()) scrollToNow(); }
+$('#prevDay').onclick = () => go(addDays(cur,-1));
+$('#nextDay').onclick = () => go(addDays(cur,1));
+$('#goToday').onclick = () => go(today());
+$('#datePick').onchange = e => e.target.value && go(e.target.value);
+$('#copyPrev').onclick = () => {
+  const p = loadDay(addDays(cur,-1)), d = loadDay(cur), prev = JSON.stringify(d); let n = 0;
+  for (let i=0;i<K;i++) if (!d.a[i] && p.a[i]){ d.a[i] = p.a[i]; if (p.n[i]) d.n[i] = p.n[i]; n++; }
+  if (!n) return toast('Nothing to copy');
+  saveDay(cur,d); renderDay(); toast(`Filled ${fmtMin(n*15)} from yesterday`, 'Undo', ()=>{ saveDay(cur, JSON.parse(prev)); renderDay(); });
+};
+
+/* gestures: tap start + tap end, or long-press drag (touch) / click-drag (mouse) */
+const grid = $('#grid');
+const rowAt = (x,y) => { const el = document.elementFromPoint(x,y); const row = el && el.closest('.row'); return row ? +row.dataset.r : null; };
+let lp = null, dragging = false, suppressClick = false, autoScroll = 0, lastPt = null;
+function startDrag(r){ dragging = true; anchor = null; selA = selB = r; $('#tapbar').classList.remove('on'); paintSel(); navigator.vibrate && navigator.vibrate(12); }
+function moveDrag(x,y){ lastPt = [x,y]; const r = rowAt(x,y); if (r!=null && r!==selB){ selB = r; paintSel(); }
+  autoScroll = y < 120 ? -10 : y > innerHeight-150 ? 10 : 0; }
+function endDrag(){ dragging = false; autoScroll = 0; suppressClick = true; setTimeout(()=>suppressClick=false, 400); openSheet(Math.min(selA,selB), Math.max(selA,selB)+1); }
+(function tick(){ if (dragging && autoScroll){ window.scrollBy(0, autoScroll); lastPt && moveDrag(...lastPt); } requestAnimationFrame(tick); })();
+
+grid.addEventListener('touchstart', e => {
+  if (e.touches.length!==1) return; const t = e.touches[0], r = rowAt(t.clientX,t.clientY); if (r==null) return;
+  lp = {x:t.clientX, y:t.clientY, r, timer:setTimeout(()=>{ lp && startDrag(lp.r); }, 380)};
+}, {passive:true});
+grid.addEventListener('touchmove', e => {
+  const t = e.touches[0];
+  if (dragging){ e.preventDefault(); moveDrag(t.clientX,t.clientY); return; }
+  if (lp && Math.hypot(t.clientX-lp.x, t.clientY-lp.y) > 8){ clearTimeout(lp.timer); lp = null; }
+}, {passive:false});
+grid.addEventListener('touchend', e => { if (lp){ clearTimeout(lp.timer); lp = null; } if (dragging){ e.preventDefault(); endDrag(); } });
+grid.addEventListener('touchcancel', () => { if (lp){ clearTimeout(lp.timer); lp = null; } if (dragging){ dragging=false; clearSel(); } });
+grid.addEventListener('contextmenu', e => e.preventDefault());
+let mouseDown = null;
+grid.addEventListener('mousedown', e => { if (e.button) return; const r = rowAt(e.clientX,e.clientY); if (r!=null) mouseDown = {r, x:e.clientX, y:e.clientY}; });
+window.addEventListener('mousemove', e => {
+  if (mouseDown && !dragging && Math.abs(e.clientY-mouseDown.y) > 6) startDrag(mouseDown.r);
+  if (dragging && mouseDown) moveDrag(e.clientX,e.clientY);
+});
+window.addEventListener('mouseup', () => { if (dragging && mouseDown) endDrag(); mouseDown = null; });
+grid.addEventListener('click', e => {
+  if (suppressClick || dragging) return;
+  const r = rowAt(e.clientX,e.clientY); if (r==null) return;
+  if (anchor==null){
+    anchor = r; selA = selB = r; paintSel();
+    $('#tapMsg').textContent = `Start ${t12(r*KR())}. Now tap the last block.`;
+    $('#tapbar').classList.add('on');
+  } else {
+    const a = Math.min(anchor,r), b = Math.max(anchor,r); clearSel(); openSheet(a, b+1);
+  }
+});
+$('#tapOne').onclick = () => { const r = anchor; clearSel(); openSheet(r, r+1); };
+$('#tapCancel').onclick = clearSel;
+$('#fab').onclick = () => {
+  const now = new Date(), r = Math.floor((now.getHours()*60+now.getMinutes())/G());
+  openSheet(Math.max(0,r-1), Math.max(1,r));
+};
+
+/* ---------- sheet (activity picker) ---------- */
+function fillTimeSelects(fromSlot, toSlot){
+  const k = KR(); let f = '', t = '';
+  for (let s=0; s<K; s+=k) f += `<option value="${s}">${t12(s)}</option>`;
+  for (let s=k; s<=K; s+=k) t += `<option value="${s}">${t12(s)}</option>`;
+  $('#shFrom').innerHTML = f; $('#shTo').innerHTML = t;
+  $('#shFrom').value = fromSlot; $('#shTo').value = toSlot; updDur();
+}
+function updDur(){
+  const f = +$('#shFrom').value, t = +$('#shTo').value;
+  $('#shDur').textContent = t>f ? `${fmtMin((t-f)*15)} on ${dayName(cur)}` : 'End must be after start';
+}
+$('#shFrom').onchange = () => { if (+$('#shTo').value <= +$('#shFrom').value) $('#shTo').value = +$('#shFrom').value + KR(); updDur(); };
+$('#shTo').onchange = updDur;
+function openSheet(rowA, rowB){
+  const k = KR(), from = rowA*k, to = rowB*k, d = loadDay(cur);
+  fillTimeSelects(from, to);
+  // prefill note if the whole range shares one
+  const notes = new Set(); for (let i=from;i<to;i++) notes.add(d.n[i]||'');
+  $('#shNote').value = notes.size===1 ? [...notes][0] : '';
+  const vis = acts.filter(a=>!a.hidden);
+  $('#shChips').innerHTML = vis.map(a=>`<button class="chip" style="--c:${a.color}" data-id="${a.id}">${esc(a.name)}</button>`).join('')
+    + `<button class="chip ghost" data-id="__new">+ New activity</button><button class="chip clear" data-id="">Clear blocks</button>`;
+  $('#scrim').classList.add('on'); $('#sheet').classList.add('on');
+}
+function closeSheet(){ $('#scrim').classList.remove('on'); $('#sheet').classList.remove('on'); }
+$('#scrim').onclick = () => { closeSheet(); clearSel(); };
+$('#shChips').onclick = e => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  let id = b.dataset.id;
+  if (id==='__new'){
+    const name = (prompt('New activity name') || '').trim(); if (!name) return;
+    const a = {id:'a'+Date.now().toString(36), name, color:PALETTE[acts.length % PALETTE.length], hidden:false};
+    acts.push(a); saveActs(); id = a.id;
+  }
+  const f = +$('#shFrom').value, t = +$('#shTo').value; if (t<=f) return toast('End must be after start');
+  const d = loadDay(cur), prev = JSON.stringify(d), note = $('#shNote').value.trim();
+  for (let i=f;i<t;i++){ d.a[i] = id; if (id && note) d.n[i] = note; else delete d.n[i]; }
+  saveDay(cur,d); closeSheet(); clearSel(); renderDay();
+  toast(id ? `${actById(id).name} · ${fmtMin((t-f)*15)}` : `Cleared ${fmtMin((t-f)*15)}`, 'Undo', ()=>{ saveDay(cur, JSON.parse(prev)); renderDay(); });
+};
+const PALETTE = ['#4f46e5','#0f766e','#15803d','#7c3aed','#ea580c','#64748b','#ca8a04','#db2777','#0891b2','#dc2626','#9333ea','#475569','#b45309','#be123c','#0369a1','#4d7c0f'];
+
+/* weekly banner */
+function renderBanner(){
+  const lw = addDays(weekStart(today()), -7);
+  const has = range(lw, addDays(lw,6)).some(ds => localStorage.getItem(P+'d.'+ds));
+  if (!has || cfg.weekSeen===lw){ $('#weekBanner').innerHTML = ''; return; }
+  $('#weekBanner').innerHTML = `<div class="banner"><b>Your week of ${dayName(lw,{month:'short',day:'numeric'})} is ready</b><button id="bView">View</button><button id="bX">✕</button></div>`;
+  $('#bView').onclick = () => { cfg.weekSeen = lw; saveCfg(); sumMode='week'; sumAnchor=lw; show('sum'); };
+  $('#bX').onclick = () => { cfg.weekSeen = lw; saveCfg(); renderBanner(); };
+}
+
+/* ---------- SUMMARY ---------- */
+let sumMode = 'week', sumAnchor = today();
+function periodOf(mode, anchor){
+  if (mode==='day') return [anchor, anchor];
+  if (mode==='week'){ const a = weekStart(anchor); return [a, addDays(a,6)]; }
+  return [monthStart(anchor), monthEnd(anchor)];
+}
+function stepPeriod(mode, anchor, n){ return mode==='day' ? addDays(anchor,n) : mode==='week' ? addDays(weekStart(anchor),7*n) : addMonths(anchor,n); }
+function totals(dates){
+  const t = {}; let logged = 0, daysLogged = 0;
+  for (const ds of dates){ const raw = LS.get(P+'d.'+ds, null); if (!raw) continue; daysLogged++;
+    for (const id of raw.a) if (id){ t[id] = (t[id]||0)+15; logged += 15; } }
+  return {t, logged, daysLogged};
+}
+function renderSum(){
+  document.querySelectorAll('#sumMode button').forEach(b=>b.classList.toggle('on', b.dataset.m===sumMode));
+  const [a,b] = periodOf(sumMode, sumAnchor), dates = range(a,b);
+  $('#sumTitle').textContent = sumMode==='day' ? dayName(a,{weekday:'short',month:'short',day:'numeric'})
+    : sumMode==='week' ? `${dayName(a,{month:'short',day:'numeric'})} – ${dayName(b,{month:'short',day:'numeric'})}`
+    : parse(a).toLocaleDateString(undefined,{month:'long',year:'numeric'});
+  const curT = totals(dates);
+  const [pa,pb] = periodOf(sumMode, stepPeriod(sumMode, sumAnchor, -1)), prevT = totals(range(pa,pb));
+  const span = dates.filter(ds=>ds<=today()).length || dates.length;
+  const ids = Object.keys(curT.t).sort((x,y)=>curT.t[y]-curT.t[x]);
+  const max = Math.max(1, ...ids.map(i=>curT.t[i]));
+  const prevLabel = sumMode==='day' ? 'yesterday' : sumMode==='week' ? 'last week' : 'last month';
+  let html = `<div class="card"><div class="stat">
+    <div><div class="big">${hrs(curT.logged)}</div><div class="sub">logged</div></div>
+    <div><div class="big">${Math.round(curT.logged/(span*1440)*100)}%</div><div class="sub">of ${span} day${span>1?'s':''}</div></div>
+    <div><div class="big">${curT.daysLogged}</div><div class="sub">days with data</div></div></div></div>`;
+  if (!ids.length){ html += `<div class="card muted">Nothing logged in this period yet.</div>`; $('#sumBody').innerHTML = html; return; }
+  html += `<div class="card bars"><h3>Where your time went</h3>`;
+  for (const id of ids){
+    const a = actById(id), m = curT.t[id], pm = prevT.t[id]||0, diff = m-pm;
+    const avg = sumMode==='day' ? '' : `${fmtMin(Math.round(m/Math.max(1,curT.daysLogged)))}/day avg`;
+    const delta = !prevT.logged ? '' : diff===0 ? `same as ${prevLabel}` : `<span class="${diff>0?'up':'dn'}">${diff>0?'+':'−'}${fmtMin(Math.abs(diff))}</span> vs ${prevLabel}`;
+    html += `<div class="br"><div class="hd"><span><i class="dot" style="background:${a.color}"></i>${esc(a.name)}</span><span><b>${fmtMin(m)}</b> · ${Math.round(m/curT.logged*100)}%</span></div>
+      <div class="tr"><i style="width:${m/max*100}%;background:${a.color}"></i></div><div class="ft"><span>${avg}</span><span>${delta}</span></div></div>`;
+  }
+  html += `</div>`;
+  if (sumMode!=='day'){
+    html += `<div class="card days"><h3>Day by day</h3>`;
+    for (const ds of dates){ const d = LS.get(P+'d.'+ds, null);
+      html += `<div class="d"><span>${dayName(ds, sumMode==='week' ? {weekday:'short'} : {month:'numeric',day:'numeric'})}</span><div class="daybar">${d ? dayBarHTML(d) : ''}</div></div>`; }
+    html += `<div class="ft muted" style="display:flex;justify-content:space-between;margin-left:72px"><span>12 AM</span><span>6</span><span>12 PM</span><span>6</span><span>12 AM</span></div></div>`;
+  } else {
+    const d = loadDay(a); html += `<div class="card"><h3>Timeline</h3><div class="daybar" style="height:18px">${dayBarHTML(d)}</div></div>`;
+  }
+  $('#sumBody').innerHTML = html;
+}
+document.querySelectorAll('#sumMode button').forEach(b=>b.onclick=()=>{ sumMode=b.dataset.m; renderSum(); });
+$('#sumPrev').onclick = () => { sumAnchor = stepPeriod(sumMode, sumAnchor, -1); renderSum(); };
+$('#sumNext').onclick = () => { sumAnchor = stepPeriod(sumMode, sumAnchor, 1); renderSum(); };
+
+/* ---------- EXPORT ---------- */
+function expDates(){
+  const v = $('#expRange').value, t = today(), all = allDates();
+  let a, b;
+  if (v==='tw'){ a = weekStart(t); b = addDays(a,6); }
+  else if (v==='lw'){ a = addDays(weekStart(t),-7); b = addDays(a,6); }
+  else if (v==='tm'){ a = monthStart(t); b = monthEnd(t); }
+  else if (v==='lm'){ a = addMonths(t,-1); b = monthEnd(a); }
+  else if (v==='cu'){ a = $('#expFrom').value || t; b = $('#expTo').value || t; }
+  else { a = all[0] || t; b = all[all.length-1] || t; }
+  return [a, b];
+}
+function renderExpInfo(){
+  $('#expCustom').style.display = $('#expRange').value==='cu' ? 'flex' : 'none';
+  const [a,b] = expDates(), tt = totals(range(a,b));
+  $('#expInfo').textContent = `${a} to ${b}: ${tt.daysLogged} day(s) with data, ${hrs(tt.logged)} logged`;
+}
+['#expRange','#expFrom','#expTo'].forEach(s=>$(s).onchange = renderExpInfo);
+function blocksOf(ds, d){
+  const out = []; let i = 0;
+  while (i<K){ let j = i; while (j<K && d.a[j]===d.a[i] && (d.n[j]||'')===(d.n[i]||'')) j++;
+    if (d.a[i]) out.push({date:ds, start:hhmm(i), end:hhmm(j), minutes:(j-i)*15, activity:actById(d.a[i]).name, note:d.n[i]||''});
+    i = j; }
+  return out;
+}
+const csvCell = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g,'""')}"` : String(v);
+const toCSV = rows => rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
+function blocksCSV(dates){
+  const rows = [['Date','Weekday','Start','End','Minutes','Hours','Activity','Note']];
+  for (const ds of dates){ const d = LS.get(P+'d.'+ds, null); if (!d) continue;
+    for (const b of blocksOf(ds,d)) rows.push([b.date, dayName(ds,{weekday:'short'}), b.start, b.end, b.minutes, (b.minutes/60).toFixed(2), b.activity, b.note]); }
+  return toCSV(rows);
+}
+function dailyCSV(dates){
+  const used = new Set(); const data = [];
+  for (const ds of dates){ const d = LS.get(P+'d.'+ds, null); if (!d) continue; const t = {}; let tot = 0;
+    for (const id of d.a) if (id){ t[id]=(t[id]||0)+15; used.add(id); tot += 15; } data.push([ds,t,tot]); }
+  const ids = acts.map(a=>a.id).filter(id=>used.has(id)).concat([...used].filter(id=>!acts.some(a=>a.id===id)));
+  const rows = [['Date','Weekday',...ids.map(id=>actById(id).name+' (h)'),'Logged (h)','Unlogged (h)']];
+  for (const [ds,t,tot] of data) rows.push([ds, dayName(ds,{weekday:'short'}), ...ids.map(id=>((t[id]||0)/60).toFixed(2)), (tot/60).toFixed(2), ((1440-tot)/60).toFixed(2)]);
+  return toCSV(rows);
+}
+function download(name, text, type){
+  const blob = new Blob([type==='text/csv' ? '﻿'+text : text], {type:type+';charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+$('#exBlocks').onclick = () => { const [a,b] = expDates(); download(`dayblocks_blocks_${a}_to_${b}.csv`, blocksCSV(range(a,b)), 'text/csv'); };
+$('#exDaily').onclick  = () => { const [a,b] = expDates(); download(`dayblocks_daily_${a}_to_${b}.csv`, dailyCSV(range(a,b)), 'text/csv'); };
+function aiPrompt(){
+  const [a,b] = expDates(), dates = range(a,b), tt = totals(dates);
+  const lines = Object.keys(tt.t).sort((x,y)=>tt.t[y]-tt.t[x]).map(id=>`- ${actById(id).name}: ${hrs(tt.t[id])} (${fmtMin(Math.round(tt.t[id]/Math.max(1,tt.daysLogged)))}/day avg)`).join('\n');
+  return `I log my whole day in 15-minute blocks. Below is my time data from ${a} to ${b} (${tt.daysLogged} days logged, ${hrs(tt.logged)} total).
+
+Please analyze it and tell me:
+1. How I actually spend my time (patterns by weekday vs weekend, time of day).
+2. Where time is leaking or fragmented.
+3. Sleep consistency (duration and bed/wake times).
+4. Three specific, realistic changes for next week, with the time blocks you would move.
+5. Anything surprising.
+
+Totals:
+${lines}
+
+Daily totals (hours):
+${dailyCSV(dates)}
+
+All blocks:
+${blocksCSV(dates)}`;
+}
+$('#exAI').onclick = async () => { try{ await navigator.clipboard.writeText(aiPrompt()); toast('Prompt copied. Paste it into your AI chat.'); }catch{ download('dayblocks_ai_prompt.txt', aiPrompt(), 'text/plain'); } };
+$('#exAIshare').onclick = async () => { const text = aiPrompt();
+  if (navigator.share){ try{ await navigator.share({title:'My time log', text}); }catch{} } else { download('dayblocks_ai_prompt.txt', text, 'text/plain'); } };
+$('#exJSON').onclick = () => {
+  const days = {}; for (const ds of allDates()) days[ds] = LS.get(P+'d.'+ds);
+  download(`dayblocks_backup_${today()}.json`, JSON.stringify({app:'dayblocks', version:VERSION, exported:new Date().toISOString(), acts, cfg:{gran:cfg.gran}, days}), 'application/json');
+};
+$('#imJSONbtn').onclick = () => $('#imJSON').click();
+$('#imJSON').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try{
+    const j = JSON.parse(await f.text()); if (j.app!=='dayblocks') throw 0;
+    for (const a of j.acts||[]) if (!acts.some(x=>x.id===a.id)) acts.push(a);
+    saveActs(); let n = 0;
+    for (const [ds,d] of Object.entries(j.days||{})){
+      const mine = loadDay(ds); for (let i=0;i<K;i++) if (d.a[i] && !mine.a[i]){ mine.a[i] = d.a[i]; if (d.n[i]) mine.n[i] = d.n[i]; }
+      saveDay(ds, mine); n++; }
+    toast(`Restored ${n} day(s)`);
+  }catch{ toast('That file is not a DayBlocks backup'); }
+  e.target.value = '';
+};
+
+/* ---------- SETTINGS ---------- */
+function renderSettings(){
+  document.querySelectorAll('#granSeg button').forEach(b=>b.classList.toggle('on', +b.dataset.g===cfg.gran));
+  $('#actList').innerHTML = acts.map((a,i)=>`<div class="act${a.hidden?' hid':''}" data-i="${i}">
+    <input type="color" value="${a.color}" data-k="color"><input type="text" value="${esc(a.name)}" data-k="name">
+    <button class="ib small" data-k="up" title="Move up">↑</button><button class="ib small" data-k="hide">${a.hidden?'Show':'Hide'}</button></div>`).join('');
+  $('#syncUrl').value = cfg.syncUrl; $('#syncToken').value = cfg.token;
+  $('#syncInfo').innerHTML = !cfg.syncUrl ? 'Not set up. Your data stays on this phone only, so use Backup regularly.'
+    : `Last sync: ${cfg.lastSync ? new Date(cfg.lastSync).toLocaleString() : 'never'} ${cfg.lastSyncOk===false ? '<span class="err">(failed)</span>' : cfg.lastSyncOk ? '<span class="ok">✓</span>' : ''} · ${LS.get(P+'dirty',[]).length} day(s) waiting`;
+  $('#ver').textContent = VERSION;
+  const n = allDates().length;
+  if (navigator.storage && navigator.storage.persisted) navigator.storage.persisted().then(p=>{
+    $('#storeInfo').innerHTML = `${n} day(s) stored on this phone. ${p ? '<span class="ok">Protected from automatic cleanup.</span>' : 'Not yet protected from browser cleanup. Installing the app to your home screen usually fixes this.'}`; });
+  else $('#storeInfo').textContent = `${n} day(s) stored on this phone.`;
+}
+document.querySelectorAll('#granSeg button').forEach(b=>b.onclick=()=>{ cfg.gran = +b.dataset.g; saveCfg(); renderSettings(); });
+$('#actList').addEventListener('change', e => {
+  const row = e.target.closest('.act'); if (!row) return; const a = acts[+row.dataset.i], k = e.target.dataset.k;
+  if (k==='name'){ const v = e.target.value.trim(); if (v) a.name = v; else e.target.value = a.name; }
+  if (k==='color') a.color = e.target.value;
+  saveActs();
+});
+$('#actList').addEventListener('click', e => {
+  const btn = e.target.closest('button'); if (!btn) return; const i = +btn.closest('.act').dataset.i, k = btn.dataset.k;
+  if (k==='hide') acts[i].hidden = !acts[i].hidden;
+  if (k==='up' && i>0) [acts[i-1], acts[i]] = [acts[i], acts[i-1]];
+  saveActs(); renderSettings();
+});
+$('#addAct').onclick = () => { const name = $('#newAct').value.trim(); if (!name) return;
+  acts.push({id:'a'+Date.now().toString(36), name, color:PALETTE[acts.length % PALETTE.length], hidden:false}); saveActs(); $('#newAct').value=''; renderSettings(); };
+$('#saveSync').onclick = () => { cfg.syncUrl = $('#syncUrl').value.trim(); cfg.token = $('#syncToken').value.trim(); saveCfg(); toast('Saved'); renderSettings(); };
+$('#syncAll').onclick = async () => { $('#saveSync').onclick(); await sync(true); renderSettings(); };
+
+/* ---------- Google Sheet sync ---------- */
+let syncT, syncing = false;
+function scheduleSync(){ clearTimeout(syncT); if (cfg.syncUrl && cfg.token) syncT = setTimeout(()=>sync(false), 4000); }
+async function post(body){
+  const opts = {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(body), redirect:'follow'};
+  try{ const r = await fetch(cfg.syncUrl, opts); const j = await r.json(); if (!j.ok) throw new Error(j.error||'Sync rejected'); return true; }
+  catch(e){ if (e.message && /token|rejected/i.test(e.message)) throw e;
+    await fetch(cfg.syncUrl, Object.assign({}, opts, {mode:'no-cors'})); return true; } // response unreadable, sent best-effort
+}
+async function sync(all){
+  if (syncing || !cfg.syncUrl || !cfg.token || !navigator.onLine) return;
+  syncing = true; renderSyncState('Syncing…');
+  const dates = all ? allDates() : LS.get(P+'dirty', []);
+  try{
+    for (let i=0;i<dates.length;i+=31){
+      const chunk = dates.slice(i,i+31);
+      await post({token:cfg.token, acts:acts.map(a=>({name:a.name,color:a.color})), days:chunk.map(ds=>({date:ds, blocks:blocksOf(ds, loadDay(ds))}))});
+      const left = new Set(LS.get(P+'dirty', [])); chunk.forEach(d=>left.delete(d)); LS.set(P+'dirty', [...left]);
+    }
+    cfg.lastSyncOk = true; if (all && !dates.length) toast('Nothing to sync yet'); else if (all) toast(`Synced ${dates.length} day(s)`);
+  }catch(e){ cfg.lastSyncOk = false; if (all) toast('Sync failed: '+(e.message||'network')); }
+  cfg.lastSync = new Date().toISOString(); saveCfg(); syncing = false; renderSyncState();
+}
+function renderSyncState(msg){
+  const el = $('#syncState'); if (!el) return;
+  if (msg) return el.textContent = msg;
+  if (!cfg.syncUrl) return el.textContent = '';
+  const n = LS.get(P+'dirty', []).length;
+  el.innerHTML = cfg.lastSyncOk===false ? '<span class="err">Sync failed</span>' : n ? `${n} to sync` : '<span class="ok">Synced ✓</span>';
+}
+window.addEventListener('online', ()=>sync(false));
+
+/* ---------- boot ---------- */
+if (!LS.get(P+'acts', null)) saveActs();
+document.addEventListener('visibilitychange', () => { if (!document.hidden && curView==='log' && !$('#sheet').classList.contains('on')) renderDay(); });
+renderDay(); scrollToNow();
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+if ('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
+sync(false);
+</script>
+</body>
+</html>
