@@ -756,7 +756,7 @@ if (!LS.get(P+'acts', null)) saveActs();
 document.addEventListener('visibilitychange', () => { if (!document.hidden && curView==='log' && !$('#sheet').classList.contains('on')) renderDay(); });
 renderDay(); scrollToNow();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
-if ('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
+if ('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js', {updateViaCache:'none'}).catch(()=>{});
 sync(false);
 </script>
 </body>
